@@ -72,6 +72,20 @@ void destruir_simbolo(Simbolo *s)
         destruir_registro(s);
 }
 
+Simbolo *finalizar_declaracion(Simbolo *s, int aceptada)
+{
+    if (s == NULL || s->en_tabla)
+        return NULL;
+    if (!aceptada) {
+        destruir_simbolo(s);
+        return NULL;
+    }
+    /* Si el alcance no coincide, insertar devuelve NULL y el llamador
+     * conserva el candidato. No confundir fallo de API con rechazo semantico.
+     */
+    return insertar_simbolo(s);
+}
+
 int agregar_parametro_ubicado(Simbolo *f, const char *tipo,
                               const char *nombre, int linea, int columna)
 {
@@ -167,9 +181,15 @@ int firmas_iguales(const Simbolo *a, const Simbolo *b)
 
 Simbolo *insertar_simbolo(Simbolo *s)
 {
+    Simbolo *previo;
     /* Solo proteger la lista. La parte 3 decide si la declaracion es valida. */
     if (s == NULL || s->en_tabla || s->alcance != nivel_actual)
         return NULL;
+    if (s->categoria == SIMBOLO_FUNCION && !s->definicion) {
+        previo = buscar_simbolo_en_alcance_actual(s->nombre);
+        if (previo != NULL && previo->categoria == SIMBOLO_FUNCION)
+            s->reportable = 0;
+    }
     s->activo = 1;
     s->en_tabla = 1;
     s->siguiente = NULL;
@@ -221,6 +241,104 @@ void salir_alcance(void)
 int alcance_actual(void)
 {
     return nivel_actual;
+}
+
+int cargar_parametros_en_alcance(const Simbolo *funcion)
+{
+    const Parametros *p;
+    Simbolo *variable;
+    if (funcion == NULL || funcion->categoria != SIMBOLO_FUNCION ||
+        !funcion->definicion || funcion->alcance == INT_MAX ||
+        nivel_actual != funcion->alcance + 1)
+        return 0;
+    /* Revisar todos los datos antes de cambiar la tabla. No reemplaza los
+     * controles de declaraciones que debe hacer la parte 3.
+     */
+    for (p = funcion->parametros; p != NULL; p = p->siguiente)
+        if (p->nombre == NULL || *p->nombre == '\0' ||
+            p->tipo == NULL || *p->tipo == '\0')
+            return 0;
+    for (p = funcion->parametros; p != NULL; p = p->siguiente) {
+        variable = crear_simbolo(p->nombre, SIMBOLO_VARIABLE, p->tipo,
+                                 p->linea, p->columna);
+        variable->reportable = 0;
+        /* El nivel no cambia durante la copia; el candidato es nuevo. */
+        insertar_simbolo(variable);
+    }
+    return 1;
+}
+
+static size_t sumar_tamanio(size_t total, size_t adicional)
+{
+    if (adicional > (size_t) -1 - total)
+        error_fatal("Texto de tipo demasiado largo");
+    return total + adicional;
+}
+
+static char *tipo_funcion_texto(const Simbolo *f, int como_valor)
+{
+    const Parametros *p;
+    const char *apertura = como_valor ? " (*)(" : "(";
+    size_t tamanio;
+    char *texto;
+    if (f == NULL || f->categoria != SIMBOLO_FUNCION || f->tipo == NULL)
+        return NULL;
+    tamanio = sumar_tamanio(strlen(f->tipo), strlen(apertura));
+    tamanio = sumar_tamanio(tamanio, 2); /* ')' y terminador. */
+    if (f->parametros == NULL && f->tiene_prototipo)
+        tamanio = sumar_tamanio(tamanio, strlen("void"));
+    for (p = f->parametros; p != NULL; p = p->siguiente) {
+        if (p->tipo == NULL)
+            return NULL;
+        if (p != f->parametros)
+            tamanio = sumar_tamanio(tamanio, 2); /* ', ' */
+        tamanio = sumar_tamanio(tamanio, strlen(p->tipo));
+    }
+    texto = (char *) malloc(tamanio);
+    if (texto == NULL)
+        error_fatal("Sin memoria");
+    strcpy(texto, f->tipo);
+    strcat(texto, apertura);
+    if (f->parametros == NULL && f->tiene_prototipo)
+        strcat(texto, "void");
+    for (p = f->parametros; p != NULL; p = p->siguiente) {
+        if (p != f->parametros)
+            strcat(texto, ", ");
+        strcat(texto, p->tipo);
+    }
+    strcat(texto, ")");
+    return texto;
+}
+
+char *tipo_variable_texto(const Simbolo *s, int incluir_const)
+{
+    size_t tamanio;
+    char *texto;
+    if (s == NULL || s->categoria != SIMBOLO_VARIABLE || s->tipo == NULL)
+        return NULL;
+    if (!incluir_const || !s->es_const)
+        return copiar_texto(s->tipo);
+    tamanio = sumar_tamanio(strlen(s->tipo), sizeof("const "));
+    texto = (char *) malloc(tamanio);
+    if (texto == NULL)
+        error_fatal("Sin memoria");
+    strcpy(texto, "const ");
+    strcat(texto, s->tipo);
+    return texto;
+}
+
+char *firma_funcion_texto(const Simbolo *f)
+{
+    return tipo_funcion_texto(f, 0);
+}
+
+char *tipo_valor_texto(const Simbolo *s)
+{
+    if (s == NULL)
+        return NULL;
+    if (s->categoria == SIMBOLO_FUNCION)
+        return tipo_funcion_texto(s, 1);
+    return tipo_variable_texto(s, 0);
 }
 
 static void imprimir_tipo_variable(FILE *salida, const Simbolo *s)

@@ -48,13 +48,25 @@ Simbolo *crear_simbolo(const char *nombre, CategoriaSimbolo categoria,
                        const char *tipo, int linea, int columna);
 /* Solo destruye candidatos no insertados. Los insertados se liberan juntos. */
 void destruir_simbolo(Simbolo *s);
+/* La parte 3 pasa su decision: si acepta, inserta; si rechaza, destruye el
+ * candidato sin insertarlo. Copiar el diagnostico a la lista de errores ANTES
+ * de llamar con aceptada=0. No elimina registros previamente insertados.
+ * Con aceptada!=0, si falla insertar (p. ej. nivel distinto), el llamador
+ * conserva el candidato. Devuelve NULL ante rechazo o fallo de API.
+ * Si una definicion rechazada aun se necesita como contexto de su cuerpo,
+ * posponer la llamada con aceptada=0 hasta terminar de analizar ese cuerpo.
+ * Nunca insertar una declaracion rechazada para intentar borrarla despues.
+ */
+Simbolo *finalizar_declaracion(Simbolo *s, int aceptada);
 /* Inserta SIN comprobar duplicados, conflictos de tipos ni redefiniciones.
  * Devuelve s y toma su propiedad; NULL si es nulo, ya insertado o su alcance
  * no coincide con el actual. Si un candidato no insertado es rechazado,
  * sigue siendo del llamador; un registro ya insertado sigue siendo de la TS.
  * Preparar todos los atributos antes de insertar.
- * reportable vale 1 al crear. La parte 3 lo pone en 0 para prototipos
- * compatibles repetidos y para parametros registrados como variables locales.
+ * reportable vale 1 al crear. Al insertar un prototipo con una funcion previa
+ * en el mismo alcance se pone en 0; una definicion nueva conserva su entrada.
+ * Esto solo controla el listado: la parte 3 ya debio validar compatibilidad.
+ * Los parametros registrados como variables locales llevan reportable=0.
  * No modificar los enlaces ni las cadenas de los registros insertados.
  */
 Simbolo *insertar_simbolo(Simbolo *s);
@@ -70,6 +82,27 @@ int agregar_parametro_ubicado(Simbolo *f, const char *tipo,
                               const char *nombre, int linea, int columna);
 int agregar_parametro(Simbolo *f, const char *tipo, const char *nombre);
 Parametros *obtener_parametro(const Simbolo *f, int n); /* Indice desde 0. */
+/* Despues de entrar_alcance(), copia los parametros de una definicion al
+ * alcance de su cuerpo como variables no reportables. Usar una sola vez y
+ * antes de analizar las declaraciones del cuerpo. La parte 3 valida tipos,
+ * nombres duplicados y colisiones. Devuelve 0 sin insertar si faltan nombres
+ * o el nivel no es exactamente funcion->alcance+1; 1 si pudo copiarlos todos.
+ * Puede recibir un candidato rechazado que se mantiene para analizar su cuerpo.
+ */
+int cargar_parametros_en_alcance(const Simbolo *funcion);
+
+/* Formateadores: devuelven cadenas NUEVAS que el llamador libera con free().
+ * NULL si el simbolo no corresponde a la operacion. No cambian la TS.
+ * tipo_variable_texto(s,1): const float; con 0: float.
+ * firma_funcion_texto(f): int(int), double(double, unsigned int).
+ * tipo_valor_texto(f): int (*)(int); para variable, tipo base sin const.
+ * f(void) usa void; una declaracion f() mantiene parentesis vacios.
+ * No modelan punteros generales ni otras categorias de expresiones. El parser
+ * distingue el nombre de funcion (valor) de su llamada (tipo de retorno).
+ */
+char *tipo_variable_texto(const Simbolo *s, int incluir_const);
+char *firma_funcion_texto(const Simbolo *f);
+char *tipo_valor_texto(const Simbolo *s);
 
 /* Devuelven punteros prestados: no liberarlos ni modificar sus enlaces.
  * buscar_simbolo elige el alcance visible mas cercano. En el mismo alcance,
