@@ -1,4 +1,4 @@
-/* Desde la raiz del repositorio, cuando se autorice ejecutar:
+/* Desde la raiz del repositorio:
  * gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -I. \
  *     tests/prueba_ts.c ts.c errores_semanticos.c tipos.c -o /tmp/prueba_ts
  * /tmp/prueba_ts
@@ -198,6 +198,49 @@ static void probar_listado_funciones(void)
     liberar_tabla();
 }
 
+static void probar_parametro_const(void)
+{
+    Simbolo *f = crear_funcion("f", "void", "int", 1);
+    Simbolo *prototipo = crear_funcion("f", "void", "int", 2);
+    Simbolo *x;
+    obtener_parametro(f, 0)->es_const = 1;
+    /* const por valor no cambia la compatibilidad de la firma. */
+    assert(firmas_iguales(f, prototipo));
+    destruir_simbolo(prototipo);
+    marcar_definido(f);
+    assert(insertar_simbolo(f) == f);
+    entrar_alcance();
+    assert(cargar_parametros_en_alcance(f));
+    x = buscar_simbolo("x");
+    assert(x != NULL && x->es_const && !x->reportable);
+    comprobar_texto(tipo_variable_texto(x, 1), "const int");
+    comprobar_texto(tipo_valor_texto(x), "int");
+    comprobar_texto(firma_funcion_texto(f), "void(int)");
+    comprobar_salida(imprimir_funciones,
+        "* Listado de funciones declaradas y definidas:\n"
+        "f: definicion, input: const int x, retorna: void, linea 1\n");
+    salir_alcance();
+    liberar_tabla();
+}
+
+static void probar_cuerpo_rechazado(void)
+{
+    Simbolo *original = crear_funcion("incremento", "int", "int", 43);
+    Simbolo *rechazado = crear_funcion("incremento", "int", "int", 47);
+    marcar_definido(original);
+    marcar_definido(rechazado);
+    assert(insertar_simbolo(original) == original);
+    /* La parte 3 rechazo la segunda definicion, pero analiza su cuerpo. */
+    entrar_alcance();
+    assert(cargar_parametros_en_alcance(rechazado));
+    assert(buscar_simbolo("x") != NULL);
+    assert(buscar_simbolo("incremento") == original);
+    salir_alcance();
+    assert(finalizar_declaracion(rechazado, 0) == NULL);
+    assert(buscar_definicion_en_alcance_actual("incremento") == original);
+    liberar_tabla();
+}
+
 static void probar_orden_errores_y_vacios(void)
 {
     comprobar_salida(imprimir_variables,
@@ -228,6 +271,8 @@ int main(void)
     probar_rechazados_y_copias();
     probar_parametros_y_alcances();
     probar_listado_funciones();
+    probar_parametro_const();
+    probar_cuerpo_rechazado();
     probar_orden_errores_y_vacios();
     puts("Todas las pruebas de TS y reporte pasaron.");
     return 0;

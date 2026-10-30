@@ -16,6 +16,7 @@ typedef enum {
 typedef struct Parametros {
     char *nombre;                /* NULL si el prototipo omite el nombre. */
     char *tipo;
+    int es_const;               /* Calificador de la variable parametro. */
     int linea;
     int columna;
     struct Parametros *siguiente;
@@ -77,6 +78,9 @@ void marcar_definido(Simbolo *s); /* Solo candidatos de funcion no insertados. *
  * f(void): lista vacia, tiene_prototipo=1 (inicial). f(): lista vacia,
  * tiene_prototipo=0. Las acciones semanticas representan asi estos casos;
  * no deben agregar un nodo void como parametro real.
+ * Para un parametro const, antes de insertar la funcion:
+ * obtener_parametro(f, indice)->es_const = 1;
+ * Este calificador se conserva en el cuerpo, pero no distingue firmas.
  */
 int agregar_parametro_ubicado(Simbolo *f, const char *tipo,
                               const char *nombre, int linea, int columna);

@@ -262,6 +262,7 @@ int cargar_parametros_en_alcance(const Simbolo *funcion)
         variable = crear_simbolo(p->nombre, SIMBOLO_VARIABLE, p->tipo,
                                  p->linea, p->columna);
         variable->reportable = 0;
+        variable->es_const = p->es_const;
         /* El nivel no cambia durante la copia; el candidato es nuevo. */
         insertar_simbolo(variable);
     }
@@ -385,6 +386,8 @@ void imprimir_funciones(FILE *salida)
         for (p = s->parametros; p != NULL; p = p->siguiente) {
             if (p != s->parametros)
                 fputs(", ", salida);
+            if (p->es_const)
+                fputs("const ", salida);
             fputs(p->tipo, salida);
             if (p->nombre != NULL && *p->nombre != '\0')
                 fprintf(salida, " %s", p->nombre);
