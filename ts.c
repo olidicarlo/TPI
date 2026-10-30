@@ -269,13 +269,6 @@ int cargar_parametros_en_alcance(const Simbolo *funcion)
     return 1;
 }
 
-static size_t sumar_tamanio(size_t total, size_t adicional)
-{
-    if (adicional > (size_t) -1 - total)
-        error_fatal("Texto de tipo demasiado largo");
-    return total + adicional;
-}
-
 static char *tipo_funcion_texto(const Simbolo *f, int como_valor)
 {
     const Parametros *p;
@@ -284,16 +277,15 @@ static char *tipo_funcion_texto(const Simbolo *f, int como_valor)
     char *texto;
     if (f == NULL || f->categoria != SIMBOLO_FUNCION || f->tipo == NULL)
         return NULL;
-    tamanio = sumar_tamanio(strlen(f->tipo), strlen(apertura));
-    tamanio = sumar_tamanio(tamanio, 2); /* ')' y terminador. */
+    tamanio = strlen(f->tipo) + strlen(apertura) + 2; /* ')' y terminador. */
     if (f->parametros == NULL && f->tiene_prototipo)
-        tamanio = sumar_tamanio(tamanio, strlen("void"));
+        tamanio += strlen("void");
     for (p = f->parametros; p != NULL; p = p->siguiente) {
         if (p->tipo == NULL)
             return NULL;
         if (p != f->parametros)
-            tamanio = sumar_tamanio(tamanio, 2); /* ', ' */
-        tamanio = sumar_tamanio(tamanio, strlen(p->tipo));
+            tamanio += 2; /* ', ' */
+        tamanio += strlen(p->tipo);
     }
     texto = (char *) malloc(tamanio);
     if (texto == NULL)
@@ -319,7 +311,7 @@ char *tipo_variable_texto(const Simbolo *s, int incluir_const)
         return NULL;
     if (!incluir_const || !s->es_const)
         return copiar_texto(s->tipo);
-    tamanio = sumar_tamanio(strlen(s->tipo), sizeof("const "));
+    tamanio = strlen(s->tipo) + sizeof("const ");
     texto = (char *) malloc(tamanio);
     if (texto == NULL)
         error_fatal("Sin memoria");
